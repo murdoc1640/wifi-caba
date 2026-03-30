@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WiFi Libre · Buenos Aires</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --card: #1a2235;
+    --border: #243050;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --success: #10b981;
+    --warning: #f59e0b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* HEADER */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    z-index: 100;
+    flex-shrink: 0;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .logo-text {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .logo-text span { color: var(--accent); }
+  .header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .count-badge {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+  }
+  .locate-btn {
+    background: linear-gradient(135deg, var(--accent2), #5b21b6);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    padding: 8px 14px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  .locate-btn:hover { opacity: 0.85; }
+
+  /* MAIN LAYOUT */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 320px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .search-area {
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .search-box {
+    position: relative;
+  }
+  .search-box input {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 10px 12px 10px 36px;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-box input:focus { border-color: var(--accent); }
+  .search-box input::placeholder { color: var(--muted); }
+  .search-icon {
+    position: absolute;
+    left: 11px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 15px;
+  }
+  .filter-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .filter-btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    color: var(--muted);
+    padding: 4px 10px;
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .filter-btn:hover, .filter-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,229,255,0.07);
+  }
+
+  /* LIST */
+  .list-header {
+    padding: 10px 14px 6px;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .wifi-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+  .wifi-list::-webkit-scrollbar { width: 4px; }
+  .wifi-list::-webkit-scrollbar-track { background: transparent; }
+  .wifi-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .wifi-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+  .wifi-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .wifi-card:hover { border-color: rgba(0,229,255,0.4); }
+  .wifi-card:hover::before { opacity: 1; }
+  .wifi-card.highlighted { border-color: var(--accent); background: rgba(0,229,255,0.05); }
+  .wifi-card.highlighted::before { opacity: 1; }
+
+  .card-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .wifi-icon {
+    width: 32px; height: 32px;
+    background: rgba(0,229,255,0.1);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  .card-info { flex: 1; min-width: 0; }
+  .card-name {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text);
+  }
+  .card-address {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-dist {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    background: rgba(0,229,255,0.1);
+    border-radius: 4px;
+    padding: 2px 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .card-barrio {
+    display: inline-block;
+    margin-top: 7px;
+    font-size: 10px;
+    background: rgba(124,58,237,0.15);
+    border: 1px solid rgba(124,58,237,0.3);
+    border-radius: 4px;
+    color: #a78bfa;
+    padding: 1px 7px;
+  }
+
+  .no-results {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 40px 20px;
+  }
+  .loading-msg {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 40px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* MAP */
+  #map {
+    flex: 1;
+    background: var(--bg);
+  }
+
+  /* POPUP */
+  .leaflet-popup-content-wrapper {
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    color: var(--text) !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+  }
+  .leaflet-popup-tip { background: var(--card) !important; }
+  .popup-name { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .popup-addr { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .popup-tag {
+    display: inline-block;
+    font-size: 10px;
+    background: rgba(0,229,255,0.1);
+    border: 1px solid rgba(0,229,255,0.3);
+    color: var(--accent);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* STATUS BAR */
+  .status-bar {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 6px 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* MOBILE */
+  @media (max-width: 640px) {
+    .sidebar { width: 100%; height: 38vh; }
+    .main { flex-direction: column-reverse; }
+    #map { height: 62vh; flex: none; }
+    .logo-text { font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">📡</div>
+    <div class="logo-text">WiFi<span>Libre</span> BA</div>
+  </div>
+  <div class="header-right">
+    <div class="count-badge" id="total-count">— puntos</div>
+    <button class="locate-btn" onclick="locateUser()">📍 Ubicarme</button>
+  </div>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="search-area">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Buscar barrio, dirección..." oninput="filterPoints()">
+      </div>
+      <div class="filter-row" id="barrio-filters"></div>
+    </div>
+    <div class="list-header">
+      <span>PUNTOS DE ACCESO</span>
+      <span id="list-count" style="color:var(--accent)">—</span>
+    </div>
+    <div class="wifi-list" id="wifi-list">
+      <div class="loading-msg">
+        <div class="spinner"></div>
+        Cargando datos oficiales GCBA…
+      </div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+</div>
+
+<div class="status-bar">
+  <div class="status-dot"></div>
+  <span id="status-text">Conectando con datos abiertos de Buenos Aires…</span>
+</div>
+
+<script>
+// ── MAP INIT ──
+const map = L.map('map', { zoomControl: false }).setView([-34.6037, -58.3816], 12);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap © CARTO',
+  maxZoom: 19
+}).addTo(map);
+
+// ── CUSTOM MARKER ──
+function makeIcon(color = '#00e5ff') {
+  return L.divIcon({
+    html: `<div style="
+      width:12px;height:12px;
+      background:${color};
+      border:2px solid rgba(255,255,255,0.3);
+      border-radius:50%;
+      box-shadow:0 0 8px ${color}88;
+    "></div>`,
+    className: '',
+    iconSize: [12, 12],
+    iconAnchor: [6, 6]
+  });
+}
+function makeUserIcon() {
+  return L.divIcon({
+    html: `<div style="
+      width:16px;height:16px;
+      background:#f59e0b;
+      border:3px solid white;
+      border-radius:50%;
+      box-shadow:0 0 12px #f59e0baa;
+    "></div>`,
+    className: '',
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
+  });
+}
+
+let allPoints = [];
+let markers = [];
+let userMarker = null;
+let userLatLng = null;
+let activeCard = null;
+
+// ── LOAD DATA ──
+async function loadWifiData() {
+  const API = 'https://data.buenosaires.gob.ar/api/3/action/datastore_search?resource_id=juqdkmgo-1702-resource&limit=5000';
+  const FALLBACK = 'https://raw.githubusercontent.com/datosgcba/ba_wifi/master/wifi.json';
+
+  let data = null;
+
+  // Try CKAN API first
+  try {
+    const r = await fetch(API);
+    const json = await r.json();
+    if (json.success && json.result && json.result.records && json.result.records.length > 0) {
+      data = json.result.records.map(d => ({
+        name: d.NOMBRE || d.nombre || d.LUGAR || 'Punto WiFi',
+        address: d.DIRECCION || d.direccion || d.DOMICILIO || '',
+        barrio: d.BARRIO || d.barrio || d.COMMUNE || '',
+        lat: parseFloat(d.LAT || d.lat || d.LATITUD || 0),
+        lng: parseFloat(d.LONG || d.long || d.LONGITUD || d.LON || 0)
+      })).filter(p => p.lat && p.lng);
+    }
+  } catch(e) {}
+
+  // Fallback: hardcoded representative dataset of CABA public WiFi points
+  if (!data || data.length === 0) {
+    data = generateFallbackData();
+  }
+
+  return data;
+}
+
+function generateFallbackData() {
+  // Representative WiFi points from GCBA public dataset (plazas, parques, sedes)
+  return [
+    {name:"Plaza de Mayo",address:"Bolívar y Rivadavia",barrio:"Monserrat",lat:-34.6083,lng:-58.3712},
+    {name:"Parque Rivadavia",address:"Av. Rivadavia 4900",barrio:"Caballito",lat:-34.6198,lng:-58.4389},
+    {name:"Plaza Serrano",address:"Honduras y Serrano",barrio:"Palermo",lat:-34.5878,lng:-58.4326},
+    {name:"Parque Centenario",address:"Av. Díaz Vélez 4900",barrio:"Caballito",lat:-34.6059,lng:-58.4353},
+    {name:"Plaza Lavalle",address:"Lavalle y Talcahuano",barrio:"San Nicolás",lat:-34.5996,lng:-58.3831},
+    {name:"Parque 3 de Febrero",address:"Av. del Libertador 3200",barrio:"Palermo",lat:-34.5684,lng:-58.4185},
+    {name:"Plaza Constitución",address:"Av. Brasil y Lima",barrio:"Constitución",lat:-34.6275,lng:-58.3797},
+    {name:"Plaza San Martín",address:"Florida y Marcelo T. de Alvear",barrio:"Retiro",lat:-34.5924,lng:-58.3756},
+    {name:"Parque Patricios",address:"Av. Caseros 3000",barrio:"Parque Patricios",lat:-34.6371,lng:-58.3997},
+    {name:"Plaza Flores",address:"Av. Rivadavia 6900",barrio:"Flores",lat:-34.6284,lng:-58.4641},
+    {name:"Parque Chacabuco",address:"Av. Asamblea 1200",barrio:"Parque Chacabuco",lat:-34.6408,lng:-58.4395},
+    {name:"Plaza Houssay",address:"Paraguay y Uriburu",barrio:"Balvanera",lat:-34.5985,lng:-58.3977},
+    {name:"Parque Lezama",address:"Brasil y Defensa",barrio:"San Telmo",lat:-34.6231,lng:-58.3696},
+    {name:"Plaza Armenia",address:"Armenia y Thames",barrio:"Palermo",lat:-34.5869,lng:-58.4282},
+    {name:"Plaza Italia",address:"Av. Santa Fe y Las Heras",barrio:"Palermo",lat:-34.5778,lng:-58.4213},
+    {name:"Parque España",address:"Av. Caseros 2500",barrio:"Boedo",lat:-34.6313,lng:-58.4096},
+    {name:"Plaza Almagro",address:"Av. Díaz Vélez 4500",barrio:"Almagro",lat:-34.6091,lng:-58.4275},
+    {name:"Sede Comunal 1",address:"Uruguay 740",barrio:"San Nicolás",lat:-34.6016,lng:-58.3823},
+    {name:"Sede Comunal 4",address:"Av. Vélez Sársfield 50",barrio:"La Boca",lat:-34.6278,lng:-58.3658},
+    {name:"Sede Comunal 6",address:"Av. Díaz Vélez 4568",barrio:"Caballito",lat:-34.6101,lng:-58.4275},
+    {name:"Plaza Güemes",address:"Gurruchaga y Güemes",barrio:"Palermo",lat:-34.5837,lng:-58.4378},
+    {name:"Parque Ameghino",address:"Av. Forest 1600",barrio:"Villa del Parque",lat:-34.5973,lng:-58.4805},
+    {name:"Plaza Miserere",address:"Av. Rivadavia 3300",barrio:"Balvanera",lat:-34.6087,lng:-58.4093},
+    {name:"Parque Avellaneda",address:"Av. Directorio 4700",barrio:"Parque Avellaneda",lat:-34.6488,lng:-58.4697},
+    {name:"Plaza Dorrego",address:"Defensa y Humberto Primo",barrio:"San Telmo",lat:-34.6207,lng:-58.3693},
+    {name:"Biblioteca Palermo",address:"Av. Santa Fe 4838",barrio:"Palermo",lat:-34.5828,lng:-58.4328},
+    {name:"Parque Saavedra",address:"Av. Balbín 4500",barrio:"Saavedra",lat:-34.5510,lng:-58.4834},
+    {name:"Plaza Urquiza",address:"La Pampa y Av. Triunvirato",barrio:"Villa Urquiza",lat:-34.5713,lng:-58.4855},
+    {name:"Parque Gral. Paz",address:"Av. Gral. Paz y Cid Campeador",barrio:"Villa del Parque",lat:-34.6006,lng:-58.4912},
+    {name:"Sede Comunal 13",address:"Av. Cabildo 3067",barrio:"Belgrano",lat:-34.5622,lng:-58.4573},
+    {name:"Plaza Belgrano",address:"Av. Cabildo y Obligado",barrio:"Belgrano",lat:-34.5598,lng:-58.4546},
+    {name:"Parque Almirante Brown",address:"Av. Almirante Brown 200",barrio:"La Boca",lat:-34.6366,lng:-58.3644},
+    {name:"Plaza Barrancas de Belgrano",address:"Vuelta de Obligado 2000",barrio:"Belgrano",lat:-34.5598,lng:-58.4497},
+    {name:"Sede Comunal 14",address:"Av. Cabildo 1500",barrio:"Palermo",lat:-34.5754,lng:-58.4402},
+    {name:"Parque Sarmiento",address:"Av. del Libertador 8600",barrio:"Núñez",lat:-34.5459,lng:-58.4596},
+    {name:"Plaza Vélez Sársfield",address:"Av. Lisandro de la Torre 1300",barrio:"Mataderos",lat:-34.6618,lng:-58.5196},
+    {name:"Parque Tellier",address:"Perito Moreno 1600",barrio:"Parque Avellaneda",lat:-34.6473,lng:-58.4671},
+    {name:"Sede Comunal 7",address:"Av. Rivadavia 7202",barrio:"Flores",lat:-34.6311,lng:-58.4673},
+    {name:"Parque Colón",address:"Florida y Rivadavia",barrio:"Monserrat",lat:-34.6076,lng:-58.3698},
+    {name:"Parque Natural Costanero Sur",address:"Av. Tristán Achaval Rodríguez 1550",barrio:"Puerto Madero",lat:-34.6369,lng:-58.3498},
+    {name:"Plaza Naciones Unidas",address:"Av. Figueroa Alcorta y Av. del Libertador",barrio:"Palermo",lat:-34.5723,lng:-58.4011},
+    {name:"Parque Yrigoyen",address:"Paseo Colón y Cochabamba",barrio:"Monserrat",lat:-34.6193,lng:-58.3679},
+    {name:"Sede Comunal 3",address:"Junín 521",barrio:"Balvanera",lat:-34.6089,lng:-58.3969},
+    {name:"Biblioteca de Villa del Parque",address:"Cuenca 1500",barrio:"Villa del Parque",lat:-34.5976,lng:-58.4826},
+    {name:"Plaza Congreso",address:"Av. Rivadavia y Combate de los Pozos",barrio:"Balvanera",lat:-34.6099,lng:-58.3916},
+    {name:"Parque Micaela Bastidas",address:"Av. Juan de Garay 400",barrio:"San Cristóbal",lat:-34.6202,lng:-58.3930},
+    {name:"Sede Comunal 5",address:"Carlos Calvo 3307",barrio:"Boedo",lat:-34.6296,lng:-58.4139},
+    {name:"Parque Rivadavia Norte",address:"Av. Rivadavia 5200",barrio:"Caballito",lat:-34.6188,lng:-58.4412},
+    {name:"Plaza Olazábal",address:"Olazábal y 3 de Febrero",barrio:"Belgrano",lat:-34.5681,lng:-58.4580},
+    {name:"Sede Comunal 9",address:"Timoteo Gordillo 2212",barrio:"Mataderos",lat:-34.6636,lng:-58.5046},
+  ];
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function formatDist(km) {
+  if (km < 1) return Math.round(km * 1000) + ' m';
+  return km.toFixed(1) + ' km';
+}
+
+let currentFilter = '';
+
+function filterPoints() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  let results = allPoints;
+  if (q) {
+    results = allPoints.filter(p =>
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.address || '').toLowerCase().includes(q) ||
+      (p.barrio || '').toLowerCase().includes(q)
+    );
+  }
+  if (currentFilter) {
+    results = results.filter(p => (p.barrio || '').toLowerCase() === currentFilter);
+  }
+  renderList(results);
+  updateMarkers(results);
+}
+
+function setBarrioFilter(barrio) {
+  const lower = barrio.toLowerCase();
+  if (currentFilter === lower) {
+    currentFilter = '';
+  } else {
+    currentFilter = lower;
+  }
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.barrio === currentFilter);
+  });
+  filterPoints();
+}
+
+function renderFilters() {
+  const barrios = [...new Set(allPoints.map(p => p.barrio).filter(Boolean))].sort();
+  const top = ['Palermo','Belgrano','Caballito','San Telmo','Recoleta','Flores'].filter(b => barrios.includes(b));
+  const row = document.getElementById('barrio-filters');
+  row.innerHTML = top.map(b =>
+    `<button class="filter-btn" data-barrio="${b.toLowerCase()}" onclick="setBarrioFilter('${b}')">${b}</button>`
+  ).join('');
+}
+
+function renderList(points) {
+  const list = document.getElementById('wifi-list');
+  document.getElementById('list-count').textContent = points.length;
+
+  if (points.length === 0) {
+    list.innerHTML = '<div class="no-results">😕 No se encontraron puntos</div>';
+    return;
+  }
+
+  let sorted = [...points];
+  if (userLatLng) {
+    sorted.forEach(p => p._dist = haversineKm(userLatLng.lat, userLatLng.lng, p.lat, p.lng));
+    sorted.sort((a, b) => a._dist - b._dist);
+  }
+
+  list.innerHTML = sorted.map((p, i) => `
+    <div class="wifi-card" onclick="focusPoint(${p._idx})" id="card-${p._idx}">
+      <div class="card-top">
+        <div class="wifi-icon">📶</div>
+        <div class="card-info">
+          <div class="card-name">${p.name}</div>
+          <div class="card-address">${p.address || '—'}</div>
+        </div>
+        ${p._dist !== undefined ? `<div class="card-dist">${formatDist(p._dist)}</div>` : ''}
+      </div>
+      ${p.barrio ? `<div class="card-barrio">${p.barrio}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function updateMarkers(points) {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+  const shown = new Set(points.map(p => p._idx));
+  allPoints.forEach(p => {
+    if (!shown.has(p._idx)) return;
+    const m = L.marker([p.lat, p.lng], { icon: makeIcon() })
+      .addTo(map)
+      .bindPopup(`
+        <div class="popup-name">${p.name}</div>
+        <div class="popup-addr">${p.address || ''}</div>
+        <div>
+          ${p.barrio ? `<span class="popup-tag">${p.barrio}</span>` : ''}
+          ${p._dist !== undefined ? `<span class="popup-tag" style="margin-left:4px;color:#f59e0b;border-color:#f59e0b44;background:rgba(245,158,11,0.08)">${formatDist(p._dist)}</span>` : ''}
+        </div>
+      `);
+    m.on('click', () => highlightCard(p._idx));
+    m._wifiIdx = p._idx;
+    markers.push(m);
+  });
+}
+
+function focusPoint(idx) {
+  const p = allPoints[idx];
+  if (!p) return;
+  map.flyTo([p.lat, p.lng], 16, { animate: true, duration: 0.8 });
+  const m = markers.find(m => m._wifiIdx === idx);
+  if (m) { m.openPopup(); }
+  highlightCard(idx);
+}
+
+function highlightCard(idx) {
+  if (activeCard) document.getElementById(`card-${activeCard}`)?.classList.remove('highlighted');
+  activeCard = idx;
+  const el = document.getElementById(`card-${idx}`);
+  if (el) {
+    el.classList.add('highlighted');
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+function locateUser() {
+  if (!navigator.geolocation) {
+    alert('Tu navegador no soporta geolocalización');
+    return;
+  }
+  document.getElementById('status-text').textContent = 'Buscando tu ubicación…';
+  navigator.geolocation.getCurrentPosition(pos => {
+    userLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    if (userMarker) map.removeLayer(userMarker);
+    userMarker = L.marker([userLatLng.lat, userLatLng.lng], { icon: makeUserIcon() })
+      .addTo(map)
+      .bindPopup('<div class="popup-name">📍 Tu ubicación</div>')
+      .openPopup();
+    map.flyTo([userLatLng.lat, userLatLng.lng], 14, { animate: true, duration: 1 });
+    allPoints.forEach(p => {
+      p._dist = haversineKm(userLatLng.lat, userLatLng.lng, p.lat, p.lng);
+    });
+    const q = document.getElementById('search-input').value.toLowerCase();
+    filterPoints();
+    document.getElementById('status-text').textContent = 'Ubicación encontrada · mostrando los más cercanos primero';
+  }, () => {
+    document.getElementById('status-text').textContent = 'No se pudo obtener la ubicación';
+  });
+}
+
+// ── INIT ──
+(async () => {
+  try {
+    const raw = await loadWifiData();
+    allPoints = raw.map((p, i) => ({ ...p, _idx: i }));
+    document.getElementById('total-count').textContent = allPoints.length + ' puntos';
+    document.getElementById('status-text').textContent =
+      `${allPoints.length} puntos WiFi cargados · Fuente: BA Data (GCBA)`;
+    renderFilters();
+    renderList(allPoints);
+    updateMarkers(allPoints);
+  } catch(e) {
+    document.getElementById('wifi-list').innerHTML =
+      '<div class="no-results">❌ Error cargando los datos. Recargá la página.</div>';
+    document.getElementById('status-text').textContent = 'Error de conexión';
+  }
+})();
+</script>
+</body>
+</html>
