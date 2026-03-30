@@ -54,7 +54,7 @@
 
 <header>
   <div class="logo">⚡ WIFI CABA+</div>
-  <div id="total-status" class="stats">Cargando...</div>
+  <div id="total-status" class="stats">Cargando base de datos...</div>
 </header>
 
 <div class="main-container">
@@ -74,17 +74,31 @@
 </div>
 
 <script>
-// CONFIGURACIÓN VINCULADA A TU PLANILLA
+// CONFIGURACIÓN
 const SHEET_ID = '166tvCHQrFrRDaohQ1Sh0Sf5uGLCueM7rnVeNtFQEDEc';
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
-
-const CABA_DATA = [
-  {nombre:"Plaza de Mayo", direccion:"Monserrat", lat:-34.6083, lng:-58.3721, source:"caba"},
-  {nombre:"Plaza Italia", direccion:"Palermo", lat:-34.5813, lng:-58.4211, source:"caba"},
-  {nombre:"Plaza Congreso", direccion:"Congreso", lat:-34.6097, lng:-58.3924, source:"caba"}
-];
+// URL de datos abiertos de CABA (Dataset público)
+const CABA_GEOJSON_URL = 'https://cdn.buenosaires.gob.ar/datosabiertos/datasets/ministerio-de-modernizacion-innovacion-y-tecnologia/ba-wifi/sitios-de-wi-fi-publico.geojson';
 
 let map, allPoints = [], activeFilter = 'all', activeCard = null;
+
+async function loadCabaData() {
+  try {
+    const res = await fetch(CABA_GEOJSON_URL);
+    const data = await res.json();
+    return data.features.map((f, i) => ({
+      nombre: f.properties.nombre || "Punto WiFi",
+      direccion: f.properties.ubicacion || "CABA",
+      lat: f.geometry.coordinates[1],
+      lng: f.geometry.coordinates[0],
+      source: "caba",
+      _idx: i
+    }));
+  } catch (e) {
+    console.error("Error cargando CABA:", e);
+    return [];
+  }
+}
 
 async function loadSheet() {
   try {
@@ -97,10 +111,7 @@ async function loadSheet() {
       row.c.forEach((cell, i) => { if(cols[i]) obj[cols[i]] = cell ? cell.v : null; });
       return obj;
     });
-  } catch(e) { 
-    console.error("Error cargando Excel:", e);
-    return []; 
-  }
+  } catch(e) { return []; }
 }
 
 function setFilter(val, btn) {
@@ -117,34 +128,34 @@ function filterPoints() {
   map.eachLayer(l => { if(l instanceof L.CircleMarker) map.removeLayer(l); });
 
   const filtered = allPoints.filter(p => {
-    const matchSearch = p.nombre.toLowerCase().includes(query) || (p.localidad && p.localidad.toLowerCase().includes(query));
-    const matchFilter = (activeFilter === 'all') || (p.source === activeFilter);
+    const matchSearch = p.nombre.toLowerCase().includes(query) || (p.direccion && p.direccion.toLowerCase().includes(query));
+    const matchFilter = (activeFilter === 'all') || (p.source === activeFilter) || (p.localidad && p.localidad.toLowerCase() === activeFilter);
     return matchSearch && matchFilter;
   });
 
-  filtered.forEach(p => {
+  // Mostramos solo los primeros 100 en la lista para no tildar el navegador, pero TODOS en el mapa
+  filtered.forEach((p, index) => {
     const color = p.source === 'caba' ? '#00e5ff' : '#a78bfa';
     const marker = L.circleMarker([p.lat, p.lng], {
-      radius: 9, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.8
+      radius: 7, fillColor: color, color: '#fff', weight: 1, fillOpacity: 0.8
     }).addTo(map);
 
     marker.bindPopup(`<b>${p.nombre}</b><br>${p.direccion || ''}`);
 
-    const card = document.createElement('div');
-    card.className = `card ${activeCard === p._idx ? 'highlighted' : ''}`;
-    card.id = `card-${p._idx}`;
-    card.innerHTML = `
-      <span class="card-type ${p.source==='caba'?'type-caba':'type-loc'}">${p.source==='caba'?'CABA':(p.localidad || 'Provincia')}</span>
-      <div class="card-name">${p.nombre}</div>
-      <div class="card-addr">📍 ${p.direccion || 'Ver en mapa'}</div>
-    `;
-    card.onclick = () => {
-      map.flyTo([p.lat, p.lng], 16);
-      marker.openPopup();
-      activeCard = p._idx;
-      filterPoints();
-    };
-    list.appendChild(card);
+    if (index < 100) {
+      const card = document.createElement('div');
+      card.className = `card ${activeCard === p._idx ? 'highlighted' : ''}`;
+      card.innerHTML = `
+        <span class="card-type ${p.source==='caba'?'type-caba':'type-loc'}">${p.source==='caba'?'CABA':(p.localidad || 'Provincia')}</span>
+        <div class="card-name">${p.nombre}</div>
+        <div class="card-addr">📍 ${p.direccion || 'Ver mapa'}</div>
+      `;
+      card.onclick = () => {
+        map.flyTo([p.lat, p.lng], 17);
+        marker.openPopup();
+      };
+      list.appendChild(card);
+    }
   });
 }
 
@@ -156,7 +167,7 @@ function locateUser() {
   map = L.map('map', {zoomControl:false}).setView([-34.61, -58.43], 12);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-  const caba = CABA_DATA.map((p, i) => ({...p, _idx: i}));
+  const caba = await loadCabaData();
   const sheet = await loadSheet();
   
   const conurbano = sheet.map((p, i) => ({
@@ -166,9 +177,8 @@ function locateUser() {
   }));
 
   allPoints = [...caba, ...conurbano];
-  document.getElementById('total-status').innerText = `${allPoints.length} Puntos Conectados`;
+  document.getElementById('total-status').innerText = `${allPoints.length} Puntos Online`;
 
-  // Generar botones de Localidad desde el Excel
   const filterContainer = document.getElementById('barrio-filters');
   const locs = [...new Set(sheet.map(p => p.localidad))].filter(Boolean).sort();
   locs.forEach(loc => {
